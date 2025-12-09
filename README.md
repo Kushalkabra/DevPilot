@@ -1,5 +1,6 @@
 # DevPilot: AI Auto-Dev Agent Suite
-Built for the WeMakeDevs AI Agents Assemble hackathon.
+DevPilot reduces repetitive development work by letting autonomous agents scaffold, test, refactor, and self-review code — end-to-end.
+
 
 ## Overview
 DevPilot orchestrates autonomous dev workflows (scaffold, tests, refactor) with a CLI, a Next.js dashboard, and agent backends. Runs are logged, summarized, and surfaced for humans with AI-assisted context (Kestra AI Agent, Together AI, Oumi, CodeRabbit review flows).
@@ -7,7 +8,7 @@ DevPilot orchestrates autonomous dev workflows (scaffold, tests, refactor) with 
 ## Architecture (Cline, Kestra, Oumi, Vercel, CodeRabbit, Together AI)
 - **Cline CLI** drives autonomous coding loops via `cli/devpilot-cli.ts` and logs to Next.js APIs.
 - **Kestra** executes scheduled/test/refactor workflows; AI Agent summarizes results and notifies the app.
-- **Oumi** (conceptual) RL fine-tuned model for better Jest tests; switchable in `runAgentTask`.
+- **Oumi** (scaffolded for real RL fine-tuning) for better Jest tests; switchable in `runAgentTask`.
 - **Together AI** is the default model backend for agent calls.
 - **CodeRabbit** provides PR review/QA hooks (workflow-ready).
 - **Vercel** hosts the Next.js dashboard/API (app router).
@@ -19,7 +20,7 @@ DevPilot orchestrates autonomous dev workflows (scaffold, tests, refactor) with 
 - Pluggable model backend: Together AI by default, Oumi fine-tune path documented.
 - JSON-backed storage for runs; easy to swap to DB later.
 
-## How We Use Each Sponsor Tool
+## How We Use Each  Tool
 - **Cline**: autonomous CLI flows (`devpilot scaffold|tests|refactor`) that call agent tasks and log to the app.
 - **Kestra**: orchestrates nightly tests (`workflows/kestra/nightly-tests.yml`) and refactor summaries (`workflows/kestra/refactor-summary.yml`), pushing results to `/api/kestra-webhook`.
 - **Oumi**: RL fine-tuning scaffold for Jest generation (`ml/oumi_train.py`, `configs/test_gen_config.yaml`), optional inference switch in `apps/web/lib/agents.ts`.
@@ -67,16 +68,9 @@ The dashboard shows posted summaries under each run’s detail.
 - Keep commits focused; run lint before PRs; prefer small diffs and doc updates alongside code.
 - CodeRabbit config: `.coderabbit.yml` scopes reviews to app/CLI/workflows/docs paths and summarizes findings.
 
-## Demo Script (≈2 minutes)
-1) Show dashboard loading (runs list + detail).
-2) Run CLI commands (scaffold/tests/refactor) in terminal; point to new runs appearing live.
-3) Hit `/api/kestra-webhook` with a sample payload; refresh to show Kestra AI summaries.
-4) Open `ml/oumi_train.py` to explain Oumi RL path is scaffolded (no training needed).
-5) Mention Together AI as default and the env flag to swap to Oumi.
-6) Close by highlighting sponsor integrations and hackathon scope.
 
----
-Built for the WeMakeDevs AI Agents Assemble hackathon.
+
+
 
 ## Deployment on Vercel
 - Build: `npm run build --prefix apps/web` (set in `vercel.json`; install is `npm install`).
@@ -89,4 +83,14 @@ Built for the WeMakeDevs AI Agents Assemble hackathon.
   - Optional: `RUNS_DATA_DIR` (defaults to `/tmp/devpilot-data` for serverless)
   - Optional: `NEXT_PUBLIC_API_BASE_URL` if you prefer absolute URLs; otherwise relative is fine.
 - Note: `/tmp` storage is ephemeral in serverless; for persistence, swap `lib/store.ts` to a DB/KV.
+
+## Security & Privacy Notes
+- API keys are only stored in server-side env variables.
+- No source code is sent to third parties unless explicitly triggered via CLI.
+- Kestra webhooks are validated before being persisted.
+
+## Screenshots / Demo
+- Dashboard – Runs Overview
+- Run Detail – Input, Output, AI Summary
+- Terminal – devpilot tests execution
 
