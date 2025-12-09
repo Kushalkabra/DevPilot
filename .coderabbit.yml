@@ -1,0 +1,15 @@
+reviews:
+  enabled: true
+  paths:
+    include:
+      - apps/**
+      - cli/**
+      - ml/**
+      - workflows/**
+      - docs/**
+      - README.md
+      - CONTRIBUTING.md
+  severity_threshold: info
+  summarize: true
+  pr_title_template: "[review] {{title}}"
+

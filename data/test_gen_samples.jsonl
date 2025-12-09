@@ -1,0 +1,2 @@
+{"input_code": "export function add(a: number, b: number) { return a + b; }", "target_tests": "import { add } from './add';\ndescribe('add', () => { it('adds numbers', () => { expect(add(2, 3)).toBe(5); }); });"}
+{"input_code": "export const isEven = (n: number) => n % 2 === 0;", "target_tests": "import { isEven } from './isEven';\ndescribe('isEven', () => { it('detects evens', () => { expect(isEven(4)).toBe(true); }); it('detects odds', () => { expect(isEven(5)).toBe(false); }); });"}

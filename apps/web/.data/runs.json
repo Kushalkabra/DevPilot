@@ -1,0 +1,67 @@
+[
+  {
+    "id": "run-1765274948506",
+    "taskType": "refactor",
+    "timestamp": "2025-12-09T10:09:08.506Z",
+    "input": "apps/web/app/page.tsx",
+    "outputSummary": "Simulated refactor task for payload: {\n  \"taskType\": \"refactor\",\n  \"target\": \"apps/web/app/page.tsx\",\n  \"context\": {\n    \"root\": \"C:\\\\Users\\\\Kushal\\\\Desktop\\\\DevPilot\",\n    \"target\": \"apps/web/app/page.tsx\",\n    \"targetExists\": true,\n    \"files\": [\n      \".gitignore\",\n      \"apps\\\\web\\\\.data\\\\runs.json\",\n      \"apps\\\\web\\\\.eslintrc.json\",\n      \"apps\\\\web\\\\.gitignore\",\n      \"apps\\\\web\\\\app\\\\api\\\\cline\\\\route.ts\",\n      \"apps\\\\web\\\\a",
+    "status": "completed",
+    "kestraSummaries": [
+      {
+        "status": "failed",
+        "summary": "Tests failed in auth flow",
+        "decision": "open issue",
+        "createdAt": "2025-02-01T10:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "run-1765274946832",
+    "taskType": "tests",
+    "timestamp": "2025-12-09T10:09:06.832Z",
+    "input": "apps/web/app/page.tsx",
+    "outputSummary": "Simulated tests task for payload: {\n  \"taskType\": \"tests\",\n  \"target\": \"apps/web/app/page.tsx\",\n  \"context\": {\n    \"root\": \"C:\\\\Users\\\\Kushal\\\\Desktop\\\\DevPilot\",\n    \"target\": \"apps/web/app/page.tsx\",\n    \"targetExists\": true,\n    \"files\": [\n      \".gitignore\",\n      \"apps\\\\web\\\\.data\\\\runs.json\",\n      \"apps\\\\web\\\\.eslintrc.json\",\n      \"apps\\\\web\\\\.gitignore\",\n      \"apps\\\\web\\\\app\\\\api\\\\cline\\\\route.ts\",\n      \"apps\\\\web\\\\app\\",
+    "status": "completed",
+    "kestraSummaries": [
+      {
+        "status": "failed",
+        "summary": "Tests failed in auth flow",
+        "decision": "open issue",
+        "createdAt": "2025-02-01T10:00:00Z"
+      }
+    ]
+  },
+  {
+    "id": "run-1765274944380",
+    "taskType": "scaffold",
+    "timestamp": "2025-12-09T10:09:04.380Z",
+    "input": "onboarding-wizard",
+    "outputSummary": "Simulated scaffold task for payload: {\n  \"taskType\": \"scaffold\",\n  \"target\": \"onboarding-wizard\",\n  \"context\": {\n    \"root\": \"C:\\\\Users\\\\Kushal\\\\Desktop\\\\DevPilot\",\n    \"target\": \"onboarding-wizard\",\n    \"targetExists\": false,\n    \"files\": [\n      \".gitignore\",\n      \"apps\\\\web\\\\.data\\\\runs.json\",\n      \"apps\\\\web\\\\.eslintrc.json\",\n      \"apps\\\\web\\\\.gitignore\",\n      \"apps\\\\web\\\\app\\\\api\\\\cline\\\\route.ts\",\n      \"apps\\\\web\\\\app\\\\api",
+    "status": "completed",
+    "kestraSummaries": []
+  },
+  {
+    "id": "run-1765269925506",
+    "taskType": "refactor",
+    "timestamp": "2025-12-09T08:45:25.506Z",
+    "input": "apps/web/app/page.tsx",
+    "outputSummary": "Simulated refactor task for payload: {\n  \"taskType\": \"refactor\",\n  \"target\": \"apps/web/app/page.tsx\",\n  \"context\": {\n    \"root\": \"C:\\\\Users\\\\Kushal\\\\Desktop\\\\DevPilot\",\n    \"target\": \"apps/web/app/page.tsx\",\n    \"targetExists\": true,\n    \"files\": [\n      \".gitignore\",\n      \"apps\\\\web\\\\.data\\\\runs.json\",\n      \"apps\\\\web\\\\.eslintrc.json\",\n      \"apps\\\\web\\\\.gitignore\",\n      \"apps\\\\web\\\\app\\\\api\\\\cline\\\\route.ts\",\n      \"apps\\\\web\\\\a",
+    "status": "completed"
+  },
+  {
+    "id": "run-1765269921488",
+    "taskType": "tests",
+    "timestamp": "2025-12-09T08:45:21.488Z",
+    "input": "apps/web/app/page.tsx",
+    "outputSummary": "Simulated tests task for payload: {\n  \"taskType\": \"tests\",\n  \"target\": \"apps/web/app/page.tsx\",\n  \"context\": {\n    \"root\": \"C:\\\\Users\\\\Kushal\\\\Desktop\\\\DevPilot\",\n    \"target\": \"apps/web/app/page.tsx\",\n    \"targetExists\": true,\n    \"files\": [\n      \".gitignore\",\n      \"apps\\\\web\\\\.data\\\\runs.json\",\n      \"apps\\\\web\\\\.eslintrc.json\",\n      \"apps\\\\web\\\\.gitignore\",\n      \"apps\\\\web\\\\app\\\\api\\\\cline\\\\route.ts\",\n      \"apps\\\\web\\\\app\\",
+    "status": "completed"
+  },
+  {
+    "id": "run-1765269916924",
+    "taskType": "scaffold",
+    "timestamp": "2025-12-09T08:45:16.924Z",
+    "input": "onboarding-wizard",
+    "outputSummary": "Simulated scaffold task for payload: {\n  \"taskType\": \"scaffold\",\n  \"target\": \"onboarding-wizard\",\n  \"context\": {\n    \"root\": \"C:\\\\Users\\\\Kushal\\\\Desktop\\\\DevPilot\",\n    \"target\": \"onboarding-wizard\",\n    \"targetExists\": false,\n    \"files\": [\n      \".gitignore\",\n      \"apps\\\\web\\\\.eslintrc.json\",\n      \"apps\\\\web\\\\.gitignore\",\n      \"apps\\\\web\\\\app\\\\api\\\\cline\\\\route.ts\",\n      \"apps\\\\web\\\\app\\\\api\\\\runs\\\\route.ts\",\n      \"apps\\\\web\\\\",
+    "status": "completed"
+  }
+]

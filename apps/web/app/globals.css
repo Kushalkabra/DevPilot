@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #0b1224;
+  --foreground: #e2e8f0;
+  --card: #0f172a;
+  --muted: #94a3b8;
+}
+
+body {
+  color: var(--foreground);
+  background: radial-gradient(circle at 20% 20%, #16213d 0, #0b1224 35%),
+    radial-gradient(circle at 80% 0%, #0f172a 0, #0b1224 45%),
+    #0b1224;
+  font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+}
+
+* {
+  border-color: rgba(255, 255, 255, 0.08);
+}

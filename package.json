@@ -1,0 +1,21 @@
+{
+  "name": "devpilot",
+  "private": true,
+  "version": "0.1.0",
+  "description": "DevPilot: AI Auto-Dev Agent Suite monorepo",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --prefix apps/web",
+    "build": "npm run build --prefix apps/web",
+    "lint": "npm run lint --prefix apps/web",
+    "start": "npm run start --prefix apps/web"
+  },
+  "engines": {
+    "node": ">=18.18.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.21.0"
+  }
+}

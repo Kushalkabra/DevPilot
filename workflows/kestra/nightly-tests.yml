@@ -1,0 +1,56 @@
+# Nightly test workflow (Kestra)
+# - Runs npm test
+# - Summarizes output with Kestra AI Agent
+# - If failures are detected, POSTs summary to Next.js webhook
+id: nightly-tests
+namespace: devpilot
+description: "Nightly Jest test run with AI summary and webhook notification"
+
+schedule:
+  cron: "0 2 * * *"   # 2:00 AM UTC nightly
+
+tasks:
+  # 1) Checkout / ensure workspace (assumes code is present on the worker or mounted)
+  - id: tests
+    type: io.kestra.plugin.scripts.node.v1.NodeScript
+    description: "Run npm test"
+    beforeCommands:
+      - npm ci
+    script: |
+      npm test
+
+  # 2) Summarize the test output using Kestra's AI Agent
+  - id: summarize
+    type: io.kestra.plugin.ai.agents.v1.Agent
+    description: "Summarize test output"
+    input:
+      prompt: |
+        You are an assistant that summarizes Jest test runs. Given the raw test output, produce:
+        - status: "passed" or "failed"
+        - a concise summary of failures (if any)
+        - a short success note if all passed
+        Raw output:
+        {{ outputs.tests.logs }}
+    outputPaths:
+      - status
+      - summary
+
+  # 3) If failures, send a webhook to Next.js
+  - id: notify
+    type: io.kestra.plugin.core.flow.If
+    condition: "{{ outputs.summarize.outputs.status == 'failed' }}"
+    then:
+      - id: post_webhook
+        type: io.kestra.plugin.http.v1.Http
+        description: "POST failure summary to Next.js webhook"
+        uri: "https://your-next-app.example.com/api/kestra-webhook"
+        method: POST
+        headers:
+          Content-Type: application/json
+        body: |
+          {
+            "status": "{{ outputs.summarize.outputs.status }}",
+            "summary": "{{ outputs.summarize.outputs.summary }}",
+            "createdAt": "{{ now() }}"
+          }
+

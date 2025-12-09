@@ -1,0 +1,47 @@
+# Refactor summary workflow (Kestra)
+# - Triggered via HTTP
+# - Receives info about a DevPilot refactor run
+# - Uses Kestra AI Agent to summarize the diff for humans
+id: refactor-summary
+namespace: devpilot
+description: "Summarize DevPilot refactor outputs for human review"
+
+triggers:
+  - id: http-trigger
+    type: io.kestra.plugin.core.trigger.http.Http
+    description: "Invoke via HTTP with refactor run details"
+    conditions:
+      # Adjust paths/verbs as needed; this is a POST handler example.
+      method:
+        eq: "POST"
+
+tasks:
+  - id: summarize_diff
+    type: io.kestra.plugin.ai.agents.v1.Agent
+    description: "Summarize refactor diff"
+    input:
+      prompt: |
+        You are a senior engineer summarizing a refactor diff for humans.
+        Input payload (JSON):
+        {{ trigger.body | json }}
+
+        Please produce:
+        - title: short human-friendly summary
+        - summary: 2-4 bullet points explaining what changed and why
+        - risks: 1-2 bullet points on risk or regression
+        - followups: optional next steps
+    outputPaths:
+      - title
+      - summary
+      - risks
+      - followups
+
+  - id: respond
+    type: io.kestra.plugin.core.log.Log
+    message: |
+      Refactor summary:
+      Title: {{ outputs.summarize_diff.outputs.title }}
+      Summary: {{ outputs.summarize_diff.outputs.summary }}
+      Risks: {{ outputs.summarize_diff.outputs.risks }}
+      Followups: {{ outputs.summarize_diff.outputs.followups }}
+
