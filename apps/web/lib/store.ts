@@ -30,22 +30,53 @@ async function getKV() {
   if (process.env.REDIS_URL) {
     try {
       const { createClient } = await import("redis");
-      const client = createClient({ url: process.env.REDIS_URL });
+      const client = createClient({ 
+        url: process.env.REDIS_URL,
+        socket: {
+          reconnectStrategy: (retries) => {
+            if (retries > 3) {
+              console.error("[store] Redis reconnection failed after 3 retries");
+              return new Error("Redis reconnection limit exceeded");
+            }
+            return Math.min(retries * 100, 1000);
+          },
+        },
+      });
+      
+      // Handle connection errors
+      client.on("error", (err) => {
+        console.error("[store] Redis client error:", err);
+      });
+      
       await client.connect();
+      console.log("[store] Redis connected successfully");
       
       kv = {
         get: async (key: string) => {
-          const value = await client.get(key);
-          return value;
+          try {
+            const value = await client.get(key);
+            console.log(`[store] Redis GET ${key}:`, value ? "found" : "not found");
+            return value;
+          } catch (error) {
+            console.error(`[store] Redis GET error for ${key}:`, error);
+            throw error;
+          }
         },
         set: async (key: string, value: string) => {
-          await client.set(key, value);
+          try {
+            await client.set(key, value);
+            console.log(`[store] Redis SET ${key}: success`);
+          } catch (error) {
+            console.error(`[store] Redis SET error for ${key}:`, error);
+            throw error;
+          }
         },
       };
       console.log("[store] Using Redis for persistent storage (REDIS_URL)");
       return kv;
     } catch (error) {
-      console.warn("[store] Redis connection failed, trying Vercel KV:", error);
+      console.error("[store] Redis connection failed:", error);
+      console.warn("[store] Falling back to Vercel KV or file storage");
     }
   }
   
@@ -90,20 +121,26 @@ export async function loadRuns(): Promise<RunLog[]> {
   const kvClient = await getKV();
   if (kvClient) {
     try {
+      console.log(`[store] Loading runs from Redis/KV with key: ${KV_KEY}`);
       const data = await kvClient.get(KV_KEY);
+      console.log(`[store] Retrieved data:`, data ? `${data.length} chars` : "null");
       if (data) {
         const runs = JSON.parse(data) as RunLog[];
+        console.log(`[store] Parsed ${runs.length} runs from Redis/KV`);
         // Also update memory store for consistency
         const mem = getMemoryStore();
         mem.length = 0;
         mem.push(...runs);
         return runs;
       }
+      console.log("[store] No data found in Redis/KV, returning empty array");
       return [];
     } catch (error) {
       console.error("[store] Error loading from KV:", error);
       // Fall through to file/memory storage
     }
+  } else {
+    console.log("[store] No Redis/KV client available, using file/memory storage");
   }
 
   // Fallback to file/memory storage
@@ -130,7 +167,10 @@ export async function addRun(run: RunLog): Promise<void> {
   const kvClient = await getKV();
   if (kvClient) {
     try {
-      await kvClient.set(KV_KEY, JSON.stringify(runs));
+      const data = JSON.stringify(runs);
+      console.log(`[store] Saving ${runs.length} runs to Redis/KV with key: ${KV_KEY}`);
+      await kvClient.set(KV_KEY, data);
+      console.log(`[store] Successfully saved ${runs.length} runs to Redis/KV`);
       // Also update memory store
       const mem = getMemoryStore();
       mem.length = 0;
@@ -140,6 +180,8 @@ export async function addRun(run: RunLog): Promise<void> {
       console.error("[store] Error saving to KV:", error);
       // Fall through to file storage
     }
+  } else {
+    console.log("[store] No Redis/KV client available, saving to file/memory");
   }
 
   // Fallback to file/memory storage
