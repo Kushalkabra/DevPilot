@@ -18,8 +18,55 @@ export type RunLog = {
   kestraSummaries?: KestraSummary[];
 };
 
-const dataDir =
-  process.env.RUNS_DATA_DIR ?? path.join("/tmp", "devpilot-data"); // writable on Vercel
+// Lazy initialization for Redis/KV storage
+let kv: { get: (key: string) => Promise<string | null>; set: (key: string, value: string) => Promise<void> } | null = null;
+let kvInitialized = false;
+
+async function getKV() {
+  if (kvInitialized) return kv;
+  kvInitialized = true;
+  
+  // Try standard Redis connection first (Redis Labs, Upstash, etc.)
+  if (process.env.REDIS_URL) {
+    try {
+      const { createClient } = await import("redis");
+      const client = createClient({ url: process.env.REDIS_URL });
+      await client.connect();
+      
+      kv = {
+        get: async (key: string) => {
+          const value = await client.get(key);
+          return value;
+        },
+        set: async (key: string, value: string) => {
+          await client.set(key, value);
+        },
+      };
+      console.log("[store] Using Redis for persistent storage (REDIS_URL)");
+      return kv;
+    } catch (error) {
+      console.warn("[store] Redis connection failed, trying Vercel KV:", error);
+    }
+  }
+  
+  // Fall back to Vercel KV
+  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+    try {
+      const { kv: kvClient } = await import("@vercel/kv");
+      kv = kvClient;
+      console.log("[store] Using Vercel KV for persistent storage");
+    } catch (error) {
+      console.warn("[store] Vercel KV not available, falling back to file/memory storage:", error);
+    }
+  }
+  return kv;
+}
+
+const KV_KEY = "devpilot:runs";
+const defaultDataDir = process.env.VERCEL
+  ? path.join("/tmp", "devpilot-data") // Vercel writable temp (ephemeral)
+  : path.join(process.cwd(), ".data"); // local dev default
+const dataDir = process.env.RUNS_DATA_DIR ?? defaultDataDir;
 const dataFile = path.join(dataDir, "runs.json");
 const memKey = "__DEV_PILOT_RUNS__";
 
@@ -30,6 +77,27 @@ function getMemoryStore(): RunLog[] {
 }
 
 export async function loadRuns(): Promise<RunLog[]> {
+  // Use Vercel KV if available
+  const kvClient = await getKV();
+  if (kvClient) {
+    try {
+      const data = await kvClient.get(KV_KEY);
+      if (data) {
+        const runs = JSON.parse(data) as RunLog[];
+        // Also update memory store for consistency
+        const mem = getMemoryStore();
+        mem.length = 0;
+        mem.push(...runs);
+        return runs;
+      }
+      return [];
+    } catch (error) {
+      console.error("[store] Error loading from KV:", error);
+      // Fall through to file/memory storage
+    }
+  }
+
+  // Fallback to file/memory storage
   const mem = getMemoryStore();
   if (mem.length) return mem;
   try {
@@ -48,11 +116,36 @@ export async function addRun(run: RunLog): Promise<void> {
     run.kestraSummaries = [];
   }
   runs.unshift(run);
+
+  // Use Vercel KV if available
+  const kvClient = await getKV();
+  if (kvClient) {
+    try {
+      await kvClient.set(KV_KEY, JSON.stringify(runs));
+      // Also update memory store
+      const mem = getMemoryStore();
+      mem.length = 0;
+      mem.push(...runs);
+      return;
+    } catch (error) {
+      console.error("[store] Error saving to KV:", error);
+      // Fall through to file storage
+    }
+  }
+
+  // Fallback to file/memory storage
   try {
     await fs.mkdir(dataDir, { recursive: true });
     await fs.writeFile(dataFile, JSON.stringify(runs, null, 2), "utf8");
-  } catch {
-    // Ignore persistence errors on read-only FS; memory store still works.
+    const mem = getMemoryStore();
+    mem.length = 0;
+    mem.push(...runs);
+  } catch (error) {
+    console.warn("[store] Error persisting to file:", error);
+    // Update memory store as last resort
+    const mem = getMemoryStore();
+    mem.length = 0;
+    mem.push(...runs);
   }
 }
 
@@ -67,11 +160,34 @@ export async function appendKestraSummary(
   }
   const existing = runs[idx].kestraSummaries ?? [];
   runs[idx].kestraSummaries = [summary, ...existing];
+
+  // Use Vercel KV if available
+  const kvClient = await getKV();
+  if (kvClient) {
+    try {
+      await kvClient.set(KV_KEY, JSON.stringify(runs));
+      const mem = getMemoryStore();
+      mem.length = 0;
+      mem.push(...runs);
+      return;
+    } catch (error) {
+      console.error("[store] Error saving to KV:", error);
+      // Fall through to file storage
+    }
+  }
+
+  // Fallback to file/memory storage
   try {
     await fs.mkdir(dataDir, { recursive: true });
     await fs.writeFile(dataFile, JSON.stringify(runs, null, 2), "utf8");
-  } catch {
-    // Ignore persistence errors on read-only FS; memory store still works.
+    const mem = getMemoryStore();
+    mem.length = 0;
+    mem.push(...runs);
+  } catch (error) {
+    console.warn("[store] Error persisting to file:", error);
+    const mem = getMemoryStore();
+    mem.length = 0;
+    mem.push(...runs);
   }
 }
 

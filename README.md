@@ -52,6 +52,50 @@ npx tsx cli/devpilot-cli.ts refactor apps/web/app/page.tsx
 ```
 Each call writes files and logs to `/api/cline` → `.data/runs.json` → dashboard.
 
+### Using the CLI against your deployed Vercel URL
+
+**Option 1: Environment Variables (Recommended)**
+
+Set the environment variables pointing to your Vercel deployment:
+
+**Windows (PowerShell):**
+```powershell
+$env:DEVPILOT_API_ENDPOINT="https://your-app.vercel.app/api/cline"
+$env:DEVPILOT_AGENT_ENDPOINT="https://your-app.vercel.app/api/agent/run"  # Optional: run agent tasks remotely
+npx tsx cli/devpilot-cli.ts scaffold onboarding-wizard
+```
+
+**Linux/Mac:**
+```bash
+export DEVPILOT_API_ENDPOINT="https://your-app.vercel.app/api/cline"
+export DEVPILOT_AGENT_ENDPOINT="https://your-app.vercel.app/api/agent/run"  # Optional
+npx tsx cli/devpilot-cli.ts scaffold onboarding-wizard
+```
+
+**Option 2: Helper Scripts**
+
+Use the provided helper scripts:
+
+**Windows (PowerShell):**
+```powershell
+$env:DEVPILOT_VERCEL_URL="https://your-app.vercel.app"
+.\scripts\devpilot-vercel.ps1 scaffold onboarding-wizard
+```
+
+**Linux/Mac:**
+```bash
+export DEVPILOT_VERCEL_URL="https://your-app.vercel.app"
+./scripts/devpilot-vercel.sh scaffold onboarding-wizard
+```
+
+**Vercel Protection:**
+If Vercel protection is enabled, also set `VERCEL_PROTECTION_BYPASS=<token>`:
+```powershell
+$env:VERCEL_PROTECTION_BYPASS="your-bypass-token"
+```
+
+See `docs/vercel-cli-usage.md` for detailed instructions.
+
 ## How Kestra workflows are used
 - `workflows/kestra/nightly-tests.yml`: nightly cron, runs `npm test`, summarizes via AI Agent, POSTs failures to `/api/kestra-webhook`.
 - `workflows/kestra/refactor-summary.yml`: HTTP-triggered; summarizes refactor diffs for humans via AI Agent.
@@ -75,14 +119,19 @@ The dashboard shows posted summaries under each run’s detail.
 ## Deployment on Vercel
 - Build: `npm run build --prefix apps/web` (set in `vercel.json`; install is `npm install`).
 - Output: `apps/web/.next`
-- Runtime: Node.js functions for API routes (uses `/tmp` for writable storage fallback).
+- Runtime: Node.js functions for API routes.
 - Required env vars:
   - `TOGETHER_API_KEY` (default agent backend)
   - `USE_OUMI_MODEL` (default `false`)
   - `OUMI_INFERENCE_URL`, `OUMI_API_KEY` (when using Oumi)
   - Optional: `RUNS_DATA_DIR` (defaults to `/tmp/devpilot-data` for serverless)
   - Optional: `NEXT_PUBLIC_API_BASE_URL` if you prefer absolute URLs; otherwise relative is fine.
-- Note: `/tmp` storage is ephemeral in serverless; for persistence, swap `lib/store.ts` to a DB/KV.
+- **Important**: Vercel serverless functions are stateless. For persistent storage of runs:
+  - **Recommended**: Set up Vercel KV (see `docs/vercel-kv-setup.md`)
+    - Add `KV_REST_API_URL` and `KV_REST_API_TOKEN` environment variables
+    - The store automatically uses KV when available
+  - **Alternative**: Update `lib/store.ts` to use a database (Postgres, MongoDB, etc.)
+- Note: Without KV/DB, runs won't persist between function invocations.
 
 ## Security & Privacy Notes
 - API keys are only stored in server-side env variables.

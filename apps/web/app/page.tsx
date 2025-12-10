@@ -104,7 +104,7 @@ export default function Home() {
                 key={run.id}
                 onClick={() => setSelectedId(run.id)}
                 className={`w-full rounded-xl border border-white/10 bg-white/5 p-4 text-left transition hover:-translate-y-[1px] hover:border-white/20 hover:bg-white/10 ${selected?.id === run.id ? "border-emerald-500/50 bg-emerald-500/5" : ""}`}
-              >
+        >
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-mono text-slate-400">{run.id}</span>
                   <span
@@ -193,7 +193,7 @@ export default function Home() {
                       <div
                         key={`${k.createdAt}-${k.status}-${k.summary.slice(0, 20)}`}
                         className="rounded-xl border border-white/10 bg-slate-900/70 p-4"
-                      >
+        >
                         <div className="flex items-center justify-between text-xs text-slate-400">
                           <span>{new Date(k.createdAt).toLocaleString()}</span>
                           <span className="rounded-full bg-slate-800/80 px-2 py-1 font-semibold text-slate-200">

@@ -29,8 +29,22 @@ type RunLog = {
   status: "completed" | "failed";
 };
 
-const API_ENDPOINT =
-  process.env.DEVPILOT_API_ENDPOINT ?? "http://localhost:3000/api/cline";
+const apiBase =
+  process.env.DEVPILOT_API_ENDPOINT ??
+  (process.env.NEXT_PUBLIC_API_BASE_URL
+    ? `${process.env.NEXT_PUBLIC_API_BASE_URL.replace(/\/$/, "")}/api/cline`
+    : null);
+
+const API_ENDPOINT = apiBase ?? "http://localhost:3000/api/cline";
+
+// Optional: remote agent endpoint for running tasks on Vercel
+const agentBase =
+  process.env.DEVPILOT_AGENT_ENDPOINT ??
+  (process.env.NEXT_PUBLIC_API_BASE_URL
+    ? `${process.env.NEXT_PUBLIC_API_BASE_URL.replace(/\/$/, "")}/api/agent/run`
+    : null);
+
+const AGENT_ENDPOINT = agentBase ?? null;
 const repoRoot = path.resolve(__dirname, "..");
 
 async function main() {
@@ -170,7 +184,46 @@ async function runAgentTask(
   taskType: TaskType,
   payload: unknown,
 ): Promise<AgentResult> {
-  // Placeholder: swap this with Together / Oumi orchestration.
+  // If remote agent endpoint is configured, use it
+  if (AGENT_ENDPOINT) {
+    try {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      
+      // Build URL with bypass token as query parameter if provided
+      let url = AGENT_ENDPOINT;
+      if (process.env.VERCEL_PROTECTION_BYPASS) {
+        const separator = url.includes("?") ? "&" : "?";
+        url = `${url}${separator}x-vercel-protection-bypass=${process.env.VERCEL_PROTECTION_BYPASS}`;
+        // Also set as cookie for compatibility
+        headers.Cookie = `vercel-protection-bypass=${process.env.VERCEL_PROTECTION_BYPASS}`;
+      }
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`Agent API error: ${res.status} ${res.statusText} - ${errorText}`);
+      }
+
+      const result = (await res.json()) as AgentResult;
+      console.log(`✓ Agent task executed remotely via ${AGENT_ENDPOINT}`);
+      return result;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unknown error";
+      console.warn(`⚠ Remote agent execution failed: ${message}`);
+      console.warn(`⚠ Falling back to local execution`);
+      // Fall through to local execution
+    }
+  }
+
+  // Local execution (placeholder: swap this with Together / Oumi orchestration)
   const summary = `Simulated ${taskType} task for payload: ${JSON.stringify(payload, null, 2).slice(0, 400)}`;
   const files = buildSampleFiles(taskType, payload);
   return { summary, files };
@@ -244,9 +297,22 @@ async function persistAgentOutput(files: AgentResult["files"]) {
 
 async function postLog(log: RunLog) {
   try {
-    const res = await fetch(API_ENDPOINT, {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    
+    // Build URL with bypass token as query parameter if provided
+    let url = API_ENDPOINT;
+    if (process.env.VERCEL_PROTECTION_BYPASS) {
+      const separator = url.includes("?") ? "&" : "?";
+      url = `${url}${separator}x-vercel-protection-bypass=${process.env.VERCEL_PROTECTION_BYPASS}`;
+      // Also set as cookie for compatibility
+      headers.Cookie = `vercel-protection-bypass=${process.env.VERCEL_PROTECTION_BYPASS}`;
+    }
+
+    const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(log),
     });
     if (!res.ok) {
