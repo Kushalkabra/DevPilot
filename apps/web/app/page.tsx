@@ -39,7 +39,12 @@ export default function Home() {
     async function load() {
       try {
         const res = await fetch("/api/runs");
+        if (!res.ok) {
+          console.error("Failed to fetch runs:", res.status, res.statusText);
+          return;
+        }
         const data = (await res.json()) as { runs: Run[] };
+        console.log("[Dashboard] Loaded runs:", data.runs.length, data.runs);
         setRuns(data.runs);
         if (data.runs.length) {
           setSelectedId(data.runs[0].id);
