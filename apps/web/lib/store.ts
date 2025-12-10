@@ -53,7 +53,16 @@ async function getKV() {
   if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
     try {
       const { kv: kvClient } = await import("@vercel/kv");
-      kv = kvClient;
+      // Wrap Vercel KV client to match our interface
+      kv = {
+        get: async (key: string) => {
+          const value = await kvClient.get(key);
+          return typeof value === "string" ? value : null;
+        },
+        set: async (key: string, value: string) => {
+          await kvClient.set(key, value);
+        },
+      };
       console.log("[store] Using Vercel KV for persistent storage");
     } catch (error) {
       console.warn("[store] Vercel KV not available, falling back to file/memory storage:", error);
