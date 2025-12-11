@@ -28,7 +28,7 @@ redis://default:password@host:port
 
 Example (Redis Labs):
 ```
-redis://default:FcfymKpOus2ExvBTHUYuMj4in0ZalEQ0@redis-17251.c52.us-east-1-4.ec2.cloud.redislabs.com:17251
+redis://default: your secret code
 ```
 
 #### 2. Add Environment Variable to Vercel
