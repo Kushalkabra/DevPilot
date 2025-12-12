@@ -14,9 +14,9 @@ $body = @{
     createdAt = (Get-Date).ToUniversalTime().ToString("o")
 } | ConvertTo-Json
 
-$env:VERCEL_PROTECTION_BYPASS="eWiP0eRa50moZeAiW7J626hYv1zGsBV3"
+$env:VERCEL_PROTECTION_BYPASS="your token here"
 
-curl -X POST "https://dev-pilot-3pb2w1zza-kushalkabras-projects.vercel.app/api/kestra-webhook?x-vercel-protection-bypass=$env:VERCEL_PROTECTION_BYPASS" `
+curl -X POST "your vercel link here"/api/kestra-webhook?x-vercel-protection-bypass=$env:VERCEL_PROTECTION_BYPASS" `
   -H "Content-Type: application/json" `
   -d $body
 ```
