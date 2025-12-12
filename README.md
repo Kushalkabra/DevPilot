@@ -86,10 +86,13 @@ See `docs/vercel-cli-usage.md` for detailed instructions.
    - Example: `redis://default:password@host:port`
    - See `docs/vercel-kv-setup.md` for setup instructions
 
-2. **Optional: Enhanced AI Summaries**:
-   - `GROQ_API_KEY` - For AI-powered summaries (free tier available)
+2. **Optional: AI Summaries** (choose one or use template-based):
+   - `TOGETHER_API_KEY` - For high-quality AI summaries (recommended)
+   - `GROQ_API_KEY` - Fast AI summaries (free tier available)
    - `HUGGINGFACE_API_KEY` - Alternative free AI option
-   - If not set, template-based summaries are used (no API needed)
+   - If none are set, template-based summaries are used (no API needed)
+   
+   **Priority**: Together.ai > Groq > Hugging Face > Template-based
 
 ### Deploy
 
@@ -103,6 +106,41 @@ The app will automatically use Redis for persistent storage and generate summari
 ## Sponsor Tools Integration
 
 This project integrates multiple sponsor tools to create an end-to-end autonomous development workflow:
+
+### 🛠️ Cline - CLI Framework & Autonomous Agent
+
+**How it's used:**
+- **CLI Interface**: Provides the command-line interface for executing autonomous development tasks
+- **Task Execution**: Drives the `scaffold`, `tests`, and `refactor` commands
+- **Context Collection**: Automatically collects repository context (files, code snippets) for agent tasks
+- **Remote Execution**: Supports running agent tasks locally or remotely on Vercel
+
+**Implementation:**
+- **Location**: `cli/devpilot-cli.ts`
+- **Commands**: 
+  - `scaffold <feature-name>` - Generates new feature scaffolding
+  - `tests <file-path>` - Generates test files
+  - `refactor <file-path>` - Analyzes and suggests refactoring
+- **Integration**: Logs all runs to `/api/cline` endpoint for dashboard tracking
+- **Remote Support**: Can execute agent tasks on Vercel via `DEVPILOT_AGENT_ENDPOINT`
+
+**Code Reference:**
+```typescript
+// cli/devpilot-cli.ts
+const agentResult = await runAgentTask(taskType, agentPayload);
+await persistAgentOutput(agentResult.files);
+await postLog(log);  // Logs to /api/cline
+```
+
+**Usage:**
+```bash
+# Local execution
+npx tsx cli/devpilot-cli.ts scaffold my-feature
+
+# Remote execution (set DEVPILOT_AGENT_ENDPOINT)
+$env:DEVPILOT_AGENT_ENDPOINT="https://your-app.vercel.app/api/agent/run"
+npx tsx cli/devpilot-cli.ts scaffold my-feature
+```
 
 ### 🎯 Kestra - Workflow Orchestration & AI Agent
 
@@ -164,28 +202,79 @@ await client.connect();
 await client.set(KV_KEY, JSON.stringify(runs));
 ```
 
-### 🤖 Groq / Hugging Face - Optional AI Summaries
+### 🤖 Together.ai - AI Model Backend (Optional)
 
 **How it's used:**
-- **Enhanced Summaries**: Optional AI-powered summaries using free-tier APIs
-- **Fallback**: If not configured, uses intelligent template-based summaries (no API needed)
-- **Priority**: Groq (fastest) → Hugging Face → Template-based
+- **Agent Tasks**: Powers the core agent task execution for scaffold, tests, and refactor operations
+- **Kestra Summaries**: Optional AI-powered summary generation with high-quality analysis
+- **Model Access**: Uses Together.ai's hosted LLM models (Llama-3-70b-chat-hf by default)
 
 **Implementation:**
-- **Location**: `apps/web/lib/kestra-summary.ts`
-- **Groq Integration**: Uses `llama-3.1-8b-instant` model via Groq API
-- **Hugging Face**: Uses `mistralai/Mistral-7B-Instruct-v0.2` via Inference API
-- **Template Generator**: Analyzes run data and generates contextual summaries without API calls
+- **Location**: 
+  - `apps/web/lib/agents.ts` - Agent task execution
+  - `apps/web/lib/kestra-summary.ts` - Summary generation
+- **Integration**: Automatically used when `TOGETHER_API_KEY` is set
+- **Priority**: Highest priority for AI summaries (Together.ai > Groq > Hugging Face > Template)
+
+**Switching to Together.ai:**
+Simply set the environment variable in Vercel Dashboard:
+```bash
+TOGETHER_API_KEY=your-together-api-key
+TOGETHER_MODEL=meta-llama/Llama-3-70b-chat-hf  # Optional, defaults to Llama-3-70b
+```
 
 **Code Reference:**
 ```typescript
 // apps/web/lib/kestra-summary.ts
-if (GROQ_API_KEY) {
-  // Use Groq for AI summaries
+if (TOGETHER_API_KEY) {
+  // Uses Together.ai for high-quality summaries
+  const summary = await generateWithTogether(run);
+}
+
+// apps/web/lib/agents.ts
+const response = await fetch("https://api.together.xyz/v1/chat/completions", {
+  headers: { Authorization: `Bearer ${TOGETHER_API_KEY}` },
+  body: JSON.stringify({ model: TOGETHER_MODEL, messages: [...] })
+});
+```
+
+**Benefits:**
+- High-quality AI summaries with better context understanding
+- Reliable model access with Together.ai's infrastructure
+- Easy switching via environment variables (no code changes needed)
+
+### 🤖 Groq / Hugging Face - Optional Free AI Summaries
+
+**How it's used:**
+- **Enhanced Summaries**: Optional AI-powered summaries using free-tier APIs
+- **Fallback**: If not configured, uses intelligent template-based summaries (no API needed)
+- **Priority**: Together.ai → Groq → Hugging Face → Template-based
+
+**Implementation:**
+- **Location**: `apps/web/lib/kestra-summary.ts`
+- **Groq Integration**: Uses `llama-3.1-8b-instant` model via Groq API (free tier)
+- **Hugging Face**: Uses `mistralai/Mistral-7B-Instruct-v0.2` via Inference API (free tier)
+- **Template Generator**: Analyzes run data and generates contextual summaries without API calls
+
+**Switching AI Providers:**
+The system automatically selects the best available option:
+1. **Together.ai** (if `TOGETHER_API_KEY` is set) - Highest quality
+2. **Groq** (if `GROQ_API_KEY` is set) - Fast, free tier
+3. **Hugging Face** (if `HUGGINGFACE_API_KEY` is set) - Free tier
+4. **Template-based** (default) - No API needed, works out of the box
+
+**Code Reference:**
+```typescript
+// apps/web/lib/kestra-summary.ts
+// Priority order:
+if (TOGETHER_API_KEY) {
+  return await generateWithTogether(run);  // Best quality
+} else if (GROQ_API_KEY) {
+  return await generateWithGroq(run);  // Fast, free
 } else if (HUGGINGFACE_API_KEY) {
-  // Use Hugging Face
+  return await generateWithHuggingFace(run);  // Free
 } else {
-  // Use template-based (default, no API needed)
+  return generateTemplateSummary(run);  // Default, no API
 }
 ```
 
@@ -214,9 +303,9 @@ if (GROQ_API_KEY) {
 ## Tech Stack
 
 - **Frontend**: Next.js 15, TypeScript, TailwindCSS
-- **CLI**: Node.js with TypeScript (`tsx`)
+- **CLI**: Node.js with TypeScript (`tsx`) - Powered by Cline
 - **Storage**: Redis (production) or file-based (local)
-- **Summaries**: Template-based (default) or optional free AI APIs (Groq, Hugging Face)
+- **Summaries**: Template-based (default) or optional AI APIs (Together.ai, Groq, Hugging Face)
 - **Workflow**: Kestra for orchestration and AI agent integration
 - **Hosting**: Vercel for serverless deployment
 

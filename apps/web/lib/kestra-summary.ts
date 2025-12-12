@@ -1,8 +1,10 @@
 import { type RunLog } from "./store";
 
-// Optional: Free AI API support (Hugging Face or Groq)
-const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY ?? "";
+// Optional: AI API support (Together.ai, Groq, or Hugging Face)
+const TOGETHER_API_KEY = process.env.TOGETHER_API_KEY ?? "";
+const TOGETHER_MODEL = process.env.TOGETHER_MODEL ?? "meta-llama/Llama-3-70b-chat-hf";
 const GROQ_API_KEY = process.env.GROQ_API_KEY ?? "";
+const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY ?? "";
 
 export type KestraSummary = {
   status: string;
@@ -197,13 +199,109 @@ Provide a concise JSON response:
 }
 
 /**
+ * Generate Kestra summary using Together.ai API
+ */
+async function generateWithTogether(run: RunLog): Promise<KestraSummary | null> {
+  if (!TOGETHER_API_KEY) return null;
+
+  try {
+    const prompt = `You are a senior engineer reviewing a DevPilot agent task execution.
+
+Task Type: ${run.taskType}
+Status: ${run.status}
+Input: ${run.input}
+Output Summary: ${run.outputSummary.slice(0, 500)}
+
+Please provide a concise analysis:
+1. A brief status assessment (one word: "success", "warning", or "failed")
+2. A 2-3 sentence summary of what was accomplished or what went wrong
+3. A decision/recommendation (what should happen next: proceed, review, or fix)
+
+Respond in JSON format:
+{
+  "status": "success|warning|failed",
+  "summary": "your summary here",
+  "decision": "your recommendation here"
+}`;
+
+    const body = {
+      model: TOGETHER_MODEL,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a senior engineer providing concise, actionable summaries of development tasks. Always respond with valid JSON only.",
+        },
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
+      max_tokens: 500,
+      temperature: 0.3,
+    };
+
+    const response = await fetch("https://api.together.xyz/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${TOGETHER_API_KEY}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Together.ai API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content ?? "";
+
+    // Try to parse JSON from the response
+    let parsed: { status?: string; summary?: string; decision?: string };
+    try {
+      // Extract JSON from markdown code blocks if present
+      const jsonMatch = content.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/) || content.match(/(\{[\s\S]*\})/);
+      const jsonStr = jsonMatch ? jsonMatch[1] : content;
+      parsed = JSON.parse(jsonStr);
+    } catch {
+      // If parsing fails, use the raw content
+      parsed = {
+        status: run.status === "completed" ? "success" : "failed",
+        summary: content || generateTemplateSummary(run).summary,
+        decision: run.status === "completed" ? "Proceed" : "Review required",
+      };
+    }
+
+    return {
+      status: parsed.status || (run.status === "completed" ? "success" : "failed"),
+      summary: parsed.summary || run.outputSummary.slice(0, 200),
+      decision: parsed.decision,
+      createdAt: new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error("[kestra-summary] Together.ai API error:", error);
+    return null;
+  }
+}
+
+/**
  * Generate a Kestra summary for a run
- * Uses free AI APIs if available, otherwise falls back to smart template-based summary
+ * Priority: Together.ai > Groq > Hugging Face > Template-based (no API)
  */
 export async function generateKestraSummary(
   run: RunLog,
 ): Promise<KestraSummary> {
-  // Try free AI APIs first (if configured)
+  // Try Together.ai first (if configured)
+  if (TOGETHER_API_KEY) {
+    const togetherSummary = await generateWithTogether(run);
+    if (togetherSummary) {
+      console.log("[kestra-summary] Generated summary using Together.ai API");
+      return togetherSummary;
+    }
+  }
+
+  // Try Groq (free tier)
   if (GROQ_API_KEY) {
     const groqSummary = await generateWithGroq(run);
     if (groqSummary) {
@@ -212,6 +310,7 @@ export async function generateKestraSummary(
     }
   }
 
+  // Try Hugging Face (free tier)
   if (HUGGINGFACE_API_KEY) {
     const hfSummary = await generateWithHuggingFace(run);
     if (hfSummary) {
