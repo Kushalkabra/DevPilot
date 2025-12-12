@@ -1,145 +1,222 @@
 # DevPilot: AI Auto-Dev Agent Suite
+
 DevPilot reduces repetitive development work by letting autonomous agents scaffold, test, refactor, and self-review code — end-to-end.
 
+## Quick Start
 
-## Overview
-DevPilot orchestrates autonomous dev workflows (scaffold, tests, refactor) with a CLI, a Next.js dashboard, and agent backends. Runs are logged, summarized, and surfaced for humans with AI-assisted context (Kestra AI Agent, Together AI, Oumi, CodeRabbit review flows).
+### 1. Install Dependencies
 
-## Architecture (Cline, Kestra, Oumi, Vercel, CodeRabbit, Together AI)
-- **Cline CLI** drives autonomous coding loops via `cli/devpilot-cli.ts` and logs to Next.js APIs.
-- **Kestra** executes scheduled/test/refactor workflows; AI Agent summarizes results and notifies the app.
-- **Oumi** (scaffolded for real RL fine-tuning) for better Jest tests; switchable in `runAgentTask`.
-- **Together AI** is the default model backend for agent calls.
-- **CodeRabbit** provides PR review/QA hooks (workflow-ready).
-- **Vercel** hosts the Next.js dashboard/API (app router).
-
-## Key Features
-- Dashboard to view runs, AI summaries, and decisions.
-- CLI to trigger scaffold/tests/refactor tasks and persist logs.
-- Kestra workflows for nightly tests and refactor summaries with AI-agent post-processing.
-- Pluggable model backend: Together AI by default, Oumi fine-tune path documented.
-- JSON-backed storage for runs; easy to swap to DB later.
-
-## How We Use Each  Tool
-- **Cline**: autonomous CLI flows (`devpilot scaffold|tests|refactor`) that call agent tasks and log to the app.
-- **Kestra**: orchestrates nightly tests (`workflows/kestra/nightly-tests.yml`) and refactor summaries (`workflows/kestra/refactor-summary.yml`), pushing results to `/api/kestra-webhook`.
-- **Oumi**: RL fine-tuning scaffold for Jest generation (`ml/oumi_train.py`, `configs/test_gen_config.yaml`), optional inference switch in `apps/web/lib/agents.ts`.
-- **Together AI**: default chat completion backend for `runAgentTask` (payloads already structured).
-- **CodeRabbit**: intended for PR reviews/QA; repo structured for clean diffs and doc context.
-- **Vercel**: deploy the Next.js 15 dashboard/API.
-
-## Tech Stack
-- Next.js 15 (app router), TypeScript, TailwindCSS
-- Node/TS CLI (`tsx`), simple JSON storage for runs
-- Kestra workflows (YAML)
-- Optional Oumi RL fine-tuning scaffold
-
-## Local Setup
 ```bash
 cd apps/web
 npm install
-npm run dev
-# open http://localhost:3000
 ```
-Env example: `apps/web/env.local.example` (Together/Oumi flags and keys).
 
-## How to Run DevPilot CLI commands
-From repo root (keep `npm run dev` running in another terminal):
+### 2. Start the Development Server
+
 ```bash
-npx tsx cli/devpilot-cli.ts scaffold onboarding-wizard
+npm run dev
+```
+
+The dashboard will be available at `http://localhost:3000`
+
+### 3. Run CLI Commands
+
+From the repo root (in a new terminal):
+
+```bash
+# Scaffold a new feature
+npx tsx cli/devpilot-cli.ts scaffold my-feature
+
+# Generate tests for a file
 npx tsx cli/devpilot-cli.ts tests apps/web/app/page.tsx
+
+# Refactor a file
 npx tsx cli/devpilot-cli.ts refactor apps/web/app/page.tsx
 ```
-Each call writes files and logs to `/api/cline` → `.data/runs.json` → dashboard.
 
-### Using the CLI against your deployed Vercel URL
+Each command will:
+- Execute the task
+- Generate files locally
+- Log the run to the dashboard
+- Automatically generate a Kestra summary
 
-**Option 1: Environment Variables (Recommended)**
+View results at `http://localhost:3000`
 
-Set the environment variables pointing to your Vercel deployment:
+## Using CLI with Vercel Deployment
 
-**Windows (PowerShell):**
+### Setup
+
+1. **Set Environment Variables** (PowerShell):
 ```powershell
 $env:DEVPILOT_API_ENDPOINT="https://your-app.vercel.app/api/cline"
-$env:DEVPILOT_AGENT_ENDPOINT="https://your-app.vercel.app/api/agent/run"  # Optional: run agent tasks remotely
-npx tsx cli/devpilot-cli.ts scaffold onboarding-wizard
+$env:VERCEL_PROTECTION_BYPASS="your-bypass-token"  # If protection is enabled
 ```
 
-**Linux/Mac:**
-```bash
-export DEVPILOT_API_ENDPOINT="https://your-app.vercel.app/api/cline"
-export DEVPILOT_AGENT_ENDPOINT="https://your-app.vercel.app/api/agent/run"  # Optional
-npx tsx cli/devpilot-cli.ts scaffold onboarding-wizard
-```
-
-**Option 2: Helper Scripts**
-
-Use the provided helper scripts:
-
-**Windows (PowerShell):**
+2. **Run CLI Commands**:
 ```powershell
-$env:DEVPILOT_VERCEL_URL="https://your-app.vercel.app"
-.\scripts\devpilot-vercel.ps1 scaffold onboarding-wizard
-```
-
-**Linux/Mac:**
-```bash
-export DEVPILOT_VERCEL_URL="https://your-app.vercel.app"
-./scripts/devpilot-vercel.sh scaffold onboarding-wizard
-```
-
-**Vercel Protection:**
-If Vercel protection is enabled, also set `VERCEL_PROTECTION_BYPASS=<token>`:
-```powershell
-$env:VERCEL_PROTECTION_BYPASS="your-bypass-token"
+npx tsx cli/devpilot-cli.ts scaffold my-feature
 ```
 
 See `docs/vercel-cli-usage.md` for detailed instructions.
 
-## How Kestra workflows are used
-- `workflows/kestra/nightly-tests.yml`: nightly cron, runs `npm test`, summarizes via AI Agent, POSTs failures to `/api/kestra-webhook`.
-- `workflows/kestra/refactor-summary.yml`: HTTP-triggered; summarizes refactor diffs for humans via AI Agent.
-The dashboard shows posted summaries under each run’s detail.
+## Key Features
 
-## How Oumi RL fine-tuning is integrated (conceptual)
-- `ml/oumi_train.py` + `configs/test_gen_config.yaml` mock an RL loop for Jest test quality.
-- No training required for the demo; replace `mock_oumi_trainer` with real Oumi SDK calls and host an inference endpoint.
-- In `apps/web/lib/agents.ts`, set `USE_OUMI_MODEL=true` and provide `OUMI_INFERENCE_URL`/`OUMI_API_KEY` to route agent calls to your fine-tuned model.
+- **CLI Commands**: `scaffold`, `tests`, `refactor` tasks
+- **Dashboard**: View all runs, outputs, and summaries
+- **Automatic Summaries**: Kestra summaries generated automatically for each run
+- **Persistent Storage**: Redis-backed storage for production deployments
 
-## CodeRabbit & OSS workflows
-- Clean TS/Next layout with small modules for easy review.
-- `docs/architecture.md` and `CONTRIBUTING.md` give reviewers context.
-- Keep commits focused; run lint before PRs; prefer small diffs and doc updates alongside code.
-- CodeRabbit config: `.coderabbit.yml` scopes reviews to app/CLI/workflows/docs paths and summarizes findings.
+## Architecture
+
+- **CLI** (`cli/devpilot-cli.ts`): Executes tasks and logs to API
+- **Dashboard** (`apps/web`): Next.js 15 app with TailwindCSS
+- **Storage**: Redis (production) or file-based (local development)
+- **Summaries**: Template-based (default) or optional free AI APIs (Groq, Hugging Face)
 
 
 
 
 
 ## Deployment on Vercel
-- Build: `npm run build --prefix apps/web` (set in `vercel.json`; install is `npm install`).
-- Output: `apps/web/.next`
-- Runtime: Node.js functions for API routes.
-- Required env vars:
-  - `TOGETHER_API_KEY` (default agent backend)
-  - `USE_OUMI_MODEL` (default `false`)
-  - `OUMI_INFERENCE_URL`, `OUMI_API_KEY` (when using Oumi)
-  - Optional: `RUNS_DATA_DIR` (defaults to `/tmp/devpilot-data` for serverless)
-  - Optional: `NEXT_PUBLIC_API_BASE_URL` if you prefer absolute URLs; otherwise relative is fine.
-- **Important**: Vercel serverless functions are stateless. For persistent storage of runs:
-  - **Recommended**: Set up Vercel KV (see `docs/vercel-kv-setup.md`)
-    - Add `KV_REST_API_URL` and `KV_REST_API_TOKEN` environment variables
-    - The store automatically uses KV when available
-  - **Alternative**: Update `lib/store.ts` to use a database (Postgres, MongoDB, etc.)
-- Note: Without KV/DB, runs won't persist between function invocations.
 
-## Security & Privacy Notes
-- API keys are only stored in server-side env variables.
-- No source code is sent to third parties unless explicitly triggered via CLI.
-- Kestra webhooks are validated before being persisted.
+### Required Environment Variables
 
-## Screenshots / Demo
-- Dashboard – Runs Overview
-- Run Detail – Input, Output, AI Summary
-- Terminal – devpilot tests execution
+1. **Redis Storage** (Required for production):
+   - `REDIS_URL` - Your Redis connection string
+   - Example: `redis://default:password@host:port`
+   - See `docs/vercel-kv-setup.md` for setup instructions
+
+2. **Optional: Enhanced AI Summaries**:
+   - `GROQ_API_KEY` - For AI-powered summaries (free tier available)
+   - `HUGGINGFACE_API_KEY` - Alternative free AI option
+   - If not set, template-based summaries are used (no API needed)
+
+### Deploy
+
+1. Push your code to GitHub
+2. Connect to Vercel
+3. Add environment variables in Vercel Dashboard
+4. Deploy
+
+The app will automatically use Redis for persistent storage and generate summaries for all runs.
+
+## Sponsor Tools Integration
+
+This project integrates multiple sponsor tools to create an end-to-end autonomous development workflow:
+
+### 🎯 Kestra - Workflow Orchestration & AI Agent
+
+**How it's used:**
+- **Automatic Summary Generation**: When a CLI command runs, Kestra summaries are automatically generated using template-based analysis (no external API needed)
+- **Workflow Orchestration**: Kestra workflows defined in `workflows/kestra/` for:
+  - **Nightly Tests** (`nightly-tests.yml`): Scheduled cron job that runs tests and summarizes results
+  - **Refactor Summaries** (`refactor-summary.yml`): HTTP-triggered workflow for analyzing refactor diffs
+
+**Implementation:**
+- **Location**: `apps/web/lib/kestra-summary.ts`
+- **Integration**: Automatically called in `/api/cline` endpoint after each run is saved
+- **Webhook Endpoint**: `/api/kestra-webhook` receives summaries from external Kestra workflows
+- **Display**: Summaries shown in dashboard under each run's details
+
+**Code Reference:**
+```typescript
+// apps/web/app/api/cline/route.ts
+await addRun(body);
+const summary = await generateKestraSummary(body);  // Auto-generates summary
+await appendKestraSummary(body.id, summary);
+```
+
+### 🚀 Vercel - Hosting & Deployment
+
+**How it's used:**
+- **Hosting**: Next.js 15 dashboard and API routes deployed on Vercel
+- **Serverless Functions**: API endpoints (`/api/cline`, `/api/runs`, `/api/kestra-webhook`) run as serverless functions
+- **Environment Variables**: Secure storage for Redis URLs, API keys, and configuration
+
+**Implementation:**
+- **Deployment**: Automatic via `vercel.json` configuration
+- **Build**: `cd apps/web && npm run build`
+- **Runtime**: Node.js serverless functions with 60s timeout for AI operations
+- **Protection**: Supports Vercel deployment protection with bypass tokens for CLI access
+
+**Code Reference:**
+- `vercel.json` - Deployment configuration
+- `apps/web/app/api/*/route.ts` - Serverless API routes
+
+### 💾 Redis (Redis Labs) - Persistent Storage
+
+**How it's used:**
+- **Run Storage**: All CLI runs and summaries persisted in Redis
+- **Cross-Invocation Persistence**: Ensures data survives serverless function cold starts
+- **Production Storage**: Required for Vercel deployments (serverless functions are stateless)
+
+**Implementation:**
+- **Location**: `apps/web/lib/store.ts`
+- **Connection**: Uses `redis` npm package with connection pooling
+- **Fallback**: Falls back to Vercel KV if `KV_REST_API_URL` is set, or file storage for local dev
+- **Key Structure**: `devpilot:runs` - stores array of all runs as JSON
+
+**Code Reference:**
+```typescript
+// apps/web/lib/store.ts
+const client = createClient({ url: process.env.REDIS_URL });
+await client.connect();
+await client.set(KV_KEY, JSON.stringify(runs));
+```
+
+### 🤖 Groq / Hugging Face - Optional AI Summaries
+
+**How it's used:**
+- **Enhanced Summaries**: Optional AI-powered summaries using free-tier APIs
+- **Fallback**: If not configured, uses intelligent template-based summaries (no API needed)
+- **Priority**: Groq (fastest) → Hugging Face → Template-based
+
+**Implementation:**
+- **Location**: `apps/web/lib/kestra-summary.ts`
+- **Groq Integration**: Uses `llama-3.1-8b-instant` model via Groq API
+- **Hugging Face**: Uses `mistralai/Mistral-7B-Instruct-v0.2` via Inference API
+- **Template Generator**: Analyzes run data and generates contextual summaries without API calls
+
+**Code Reference:**
+```typescript
+// apps/web/lib/kestra-summary.ts
+if (GROQ_API_KEY) {
+  // Use Groq for AI summaries
+} else if (HUGGINGFACE_API_KEY) {
+  // Use Hugging Face
+} else {
+  // Use template-based (default, no API needed)
+}
+```
+
+### 🔧 Oumi - RL Fine-Tuning (Scaffolded)
+
+**How it's used:**
+- **Future Enhancement**: Scaffolded for reinforcement learning fine-tuning of test generation
+- **Placeholder**: Currently uses mock implementation, ready for Oumi SDK integration
+
+**Implementation:**
+- **Location**: `ml/oumi_train.py`, `configs/test_gen_config.yaml`
+- **Integration Point**: `apps/web/lib/agents.ts` - can switch to Oumi model when `USE_OUMI_MODEL=true`
+- **Status**: Ready for Oumi SDK integration when available
+
+### 📝 CodeRabbit - PR Review Integration
+
+**How it's used:**
+- **Code Quality**: Repository structured for clean CodeRabbit reviews
+- **Configuration**: `.coderabbit.yml` scopes reviews to relevant paths
+- **Documentation**: `CONTRIBUTING.md` and `docs/architecture.md` provide context for reviewers
+
+**Implementation:**
+- **Config**: `.coderabbit.yml` - Review scope configuration
+- **Structure**: Clean TypeScript/Next.js layout with small, reviewable modules
+
+## Tech Stack
+
+- **Frontend**: Next.js 15, TypeScript, TailwindCSS
+- **CLI**: Node.js with TypeScript (`tsx`)
+- **Storage**: Redis (production) or file-based (local)
+- **Summaries**: Template-based (default) or optional free AI APIs (Groq, Hugging Face)
+- **Workflow**: Kestra for orchestration and AI agent integration
+- **Hosting**: Vercel for serverless deployment
 
