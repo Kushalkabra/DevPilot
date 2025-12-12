@@ -103,9 +103,9 @@ See `docs/vercel-cli-usage.md` for detailed instructions.
 
 The app will automatically use Redis for persistent storage and generate summaries for all runs.
 
-## Sponsor Tools Integration
+## Tools Integration
 
-This project integrates multiple sponsor tools to create an end-to-end autonomous development workflow:
+This project integrates multiple  tools to create an end-to-end autonomous development workflow:
 
 ### 🛠️ Cline - CLI Framework & Autonomous Agent
 
