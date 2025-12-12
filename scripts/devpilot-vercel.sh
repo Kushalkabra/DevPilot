@@ -47,3 +47,5 @@ echo ""
 # Run the CLI
 npx tsx cli/devpilot-cli.ts "$COMMAND" "$TARGET"
 
+
+

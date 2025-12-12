@@ -157,11 +157,14 @@ export async function loadRuns(): Promise<RunLog[]> {
 }
 
 export async function addRun(run: RunLog): Promise<void> {
+  console.log("[store] addRun called for:", run.id);
   const runs = await loadRuns();
+  console.log("[store] Loaded", runs.length, "existing runs");
   if (!run.kestraSummaries) {
     run.kestraSummaries = [];
   }
   runs.unshift(run);
+  console.log("[store] Added new run, total runs:", runs.length);
 
   // Use Vercel KV if available
   const kvClient = await getKV();
@@ -204,27 +207,37 @@ export async function appendKestraSummary(
   runId: string,
   summary: KestraSummary,
 ): Promise<void> {
+  console.log(`[store] appendKestraSummary called for runId: ${runId}`);
   const runs = await loadRuns();
+  console.log(`[store] Found ${runs.length} runs, looking for runId: ${runId}`);
   const idx = runs.findIndex((r) => r.id === runId);
   if (idx === -1) {
+    console.error(`[store] Run ${runId} not found. Available run IDs:`, runs.map(r => r.id));
     throw new Error(`Run ${runId} not found`);
   }
+  console.log(`[store] Found run at index ${idx}, current summaries:`, runs[idx].kestraSummaries?.length ?? 0);
   const existing = runs[idx].kestraSummaries ?? [];
   runs[idx].kestraSummaries = [summary, ...existing];
+  console.log(`[store] Updated summaries count: ${runs[idx].kestraSummaries.length}`);
 
   // Use Vercel KV if available
   const kvClient = await getKV();
   if (kvClient) {
     try {
-      await kvClient.set(KV_KEY, JSON.stringify(runs));
+      const data = JSON.stringify(runs);
+      console.log(`[store] Saving ${runs.length} runs with updated Kestra summary to Redis/KV`);
+      await kvClient.set(KV_KEY, data);
+      console.log(`[store] Successfully saved Kestra summary to Redis/KV`);
       const mem = getMemoryStore();
       mem.length = 0;
       mem.push(...runs);
       return;
     } catch (error) {
-      console.error("[store] Error saving to KV:", error);
+      console.error("[store] Error saving Kestra summary to KV:", error);
       // Fall through to file storage
     }
+  } else {
+    console.log("[store] No Redis/KV client available, saving Kestra summary to file/memory");
   }
 
   // Fallback to file/memory storage

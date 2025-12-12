@@ -10,12 +10,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
     }
 
+    console.log("[cline-api] Starting addRun for:", body.id);
     await addRun(body);
+    console.log("[cline-api] Completed addRun for:", body.id);
     console.log("[cline-log]", body);
 
     return NextResponse.json({ ok: true });
   } catch (error) {
-    console.error("cline route error", error);
+    console.error("[cline-api] Error in POST /api/cline:", error);
     return NextResponse.json(
       { error: "Failed to record log" },
       { status: 500 },
