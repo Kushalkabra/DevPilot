@@ -2,6 +2,10 @@
 
 DevPilot reduces repetitive development work by letting autonomous agents scaffold, test, refactor, and self-review code — end-to-end.
 
+![DevPilot Dashboard](assets/Screenshot%202025-12-12%20224016.png)
+
+*Dashboard showing executed runs, agent output summaries, and automatically generated Kestra AI summaries*
+
 ## Quick Start
 
 ### 1. Install Dependencies
