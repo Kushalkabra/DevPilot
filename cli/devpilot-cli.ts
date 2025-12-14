@@ -29,24 +29,76 @@ type RunLog = {
   status: "completed" | "failed";
 };
 
-const apiBase =
-  process.env.DEVPILOT_API_ENDPOINT ??
-  (process.env.NEXT_PUBLIC_API_BASE_URL
-    ? `${process.env.NEXT_PUBLIC_API_BASE_URL.replace(/\/$/, "")}/api/cline`
-    : null);
+/**
+ * Gets the API endpoint URL from environment variables or defaults to localhost
+ * @returns The API endpoint URL string
+ */
+function getApiEndpoint(): string {
+  const apiBase =
+    process.env.DEVPILOT_API_ENDPOINT ??
+    (process.env.NEXT_PUBLIC_API_BASE_URL
+      ? `${process.env.NEXT_PUBLIC_API_BASE_URL.replace(/\/$/, "")}/api/cline`
+      : null);
+  return apiBase ?? "http://localhost:3000/api/cline";
+}
 
-const API_ENDPOINT = apiBase ?? "http://localhost:3000/api/cline";
+/**
+ * Gets the agent endpoint URL from environment variables if configured
+ * @returns The agent endpoint URL string or null if not configured
+ */
+function getAgentEndpoint(): string | null {
+  const agentBase =
+    process.env.DEVPILOT_AGENT_ENDPOINT ??
+    (process.env.NEXT_PUBLIC_API_BASE_URL
+      ? `${process.env.NEXT_PUBLIC_API_BASE_URL.replace(/\/$/, "")}/api/agent/run`
+      : null);
+  return agentBase ?? null;
+}
 
-// Optional: remote agent endpoint for running tasks on Vercel
-const agentBase =
-  process.env.DEVPILOT_AGENT_ENDPOINT ??
-  (process.env.NEXT_PUBLIC_API_BASE_URL
-    ? `${process.env.NEXT_PUBLIC_API_BASE_URL.replace(/\/$/, "")}/api/agent/run`
-    : null);
-
-const AGENT_ENDPOINT = agentBase ?? null;
+const API_ENDPOINT = getApiEndpoint();
+const AGENT_ENDPOINT = getAgentEndpoint();
 const repoRoot = path.resolve(__dirname, "..");
 
+/**
+ * Extracts a human-readable error message from an error object
+ * @param error - The error object (may be Error instance or unknown)
+ * @returns A string error message
+ */
+function extractErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  return "Unknown agent failure";
+}
+
+/**
+ * Validates input based on task type
+ * @param input - The input string to validate
+ * @param taskType - The type of task being performed
+ * @returns True if input is valid, false otherwise
+ */
+function validateInput(input: string, taskType: TaskType): boolean {
+  if (!input || input.trim().length === 0) {
+    return false;
+  }
+
+  if (taskType === "tests" || taskType === "refactor") {
+    // For file paths, ensure they don't contain dangerous patterns
+    if (input.includes("..") || input.includes("~")) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Main entry point for the CLI
+ * Validates arguments, executes the requested task, and logs results
+ */
 async function main() {
   const [, , command, arg] = process.argv;
   if (!command || !arg) {
@@ -57,6 +109,12 @@ async function main() {
   const taskType = normalizeCommand(command);
   if (!taskType) {
     console.error(`Unknown command: ${command}\n`);
+    printHelp();
+    process.exit(1);
+  }
+
+  if (!validateInput(arg, taskType)) {
+    console.error(`Invalid input for ${taskType} command\n`);
     printHelp();
     process.exit(1);
   }
@@ -81,8 +139,7 @@ async function main() {
       status: "completed",
     };
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown agent failure";
+    const message = extractErrorMessage(error);
     log = {
       id: runId,
       taskType,
@@ -98,6 +155,11 @@ async function main() {
   console.log(`Logged run ${log.id} (${log.status}) to ${API_ENDPOINT}`);
 }
 
+/**
+ * Normalizes command string to TaskType enum value
+ * @param command - The raw command string from CLI
+ * @returns The normalized TaskType or null if invalid
+ */
 function normalizeCommand(command: string): TaskType | null {
   if (command === "devpilot") {
     const sub = process.argv[3];
@@ -112,6 +174,9 @@ function normalizeCommand(command: string): TaskType | null {
   return null;
 }
 
+/**
+ * Prints help text to the console
+ */
 function printHelp() {
   console.log(`DevPilot CLI
 
@@ -122,6 +187,12 @@ Usage:
 `);
 }
 
+/**
+ * Collects repository context for agent task execution
+ * @param root - The repository root directory
+ * @param target - The target file or feature name
+ * @returns Context object with file listings and target information
+ */
 async function collectContext(root: string, target: string) {
   const files = await listFiles(root, 150);
   const targetAbs = path.resolve(root, target);
@@ -139,13 +210,21 @@ async function collectContext(root: string, target: string) {
   };
 }
 
+/**
+ * Lists files in a directory up to a maximum count
+ * @param dir - The directory to scan
+ * @param max - Maximum number of files to return
+ * @returns Array of relative file paths
+ */
 async function listFiles(dir: string, max: number) {
   const results: string[] = [];
+  const ignoredDirs = ["node_modules", ".git", ".next", ".turbo"];
+
   async function walk(current: string) {
     if (results.length >= max) return;
     const entries = await fs.readdir(current, { withFileTypes: true });
     for (const entry of entries) {
-      if (["node_modules", ".git", ".next", ".turbo"].includes(entry.name)) {
+      if (ignoredDirs.includes(entry.name)) {
         continue;
       }
       const full = path.join(current, entry.name);
@@ -162,6 +241,11 @@ async function listFiles(dir: string, max: number) {
   return results;
 }
 
+/**
+ * Checks if a file or directory path exists
+ * @param p - The path to check
+ * @returns True if path exists, false otherwise
+ */
 async function pathExists(p: string) {
   try {
     await fs.stat(p);
@@ -171,6 +255,12 @@ async function pathExists(p: string) {
   }
 }
 
+/**
+ * Reads a snippet of a file's contents
+ * @param p - The file path to read
+ * @param bytes - Maximum number of bytes to read
+ * @returns The file content snippet or empty string on error
+ */
 async function readSnippet(p: string, bytes: number) {
   try {
     const content = await fs.readFile(p, "utf8");
@@ -180,47 +270,78 @@ async function readSnippet(p: string, bytes: number) {
   }
 }
 
+/**
+ * Builds request configuration with Vercel protection bypass if needed
+ * @param baseUrl - The base URL for the request
+ * @returns Object with URL and headers configured
+ */
+function buildRequestConfig(baseUrl: string): { url: string; headers: Record<string, string> } {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  let url = baseUrl;
+  const bypassToken = process.env.VERCEL_PROTECTION_BYPASS;
+  if (bypassToken) {
+    const separator = url.includes("?") ? "&" : "?";
+    url = `${url}${separator}x-vercel-protection-bypass=${bypassToken}`;
+    headers.Cookie = `vercel-protection-bypass=${bypassToken}`;
+  }
+
+  return { url, headers };
+}
+
+/**
+ * Attempts to execute agent task remotely via API endpoint
+ * @param payload - The task payload to send
+ * @returns Promise resolving to agent result if successful, null on failure
+ */
+async function tryRemoteExecution(payload: unknown): Promise<AgentResult | null> {
+  if (!AGENT_ENDPOINT) {
+    return null;
+  }
+
+  try {
+    const { url, headers } = buildRequestConfig(AGENT_ENDPOINT);
+    const response = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Agent API error: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    const result = (await response.json()) as AgentResult;
+    console.log(`✓ Agent task executed remotely via ${AGENT_ENDPOINT}`);
+    return result;
+  } catch (error) {
+    const message = extractErrorMessage(error);
+    console.warn(`⚠ Remote agent execution failed: ${message}`);
+    console.warn(`⚠ Falling back to local execution`);
+    return null;
+  }
+}
+
+/**
+ * Executes an agent task either remotely or locally
+ * @param taskType - The type of task to execute
+ * @param payload - The task payload with context
+ * @returns Promise resolving to agent result with summary and files
+ */
 async function runAgentTask(
   taskType: TaskType,
   payload: unknown,
 ): Promise<AgentResult> {
   // If remote agent endpoint is configured, use it
   if (AGENT_ENDPOINT) {
-    try {
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-      };
-      
-      // Build URL with bypass token as query parameter if provided
-      let url = AGENT_ENDPOINT;
-      if (process.env.VERCEL_PROTECTION_BYPASS) {
-        const separator = url.includes("?") ? "&" : "?";
-        url = `${url}${separator}x-vercel-protection-bypass=${process.env.VERCEL_PROTECTION_BYPASS}`;
-        // Also set as cookie for compatibility
-        headers.Cookie = `vercel-protection-bypass=${process.env.VERCEL_PROTECTION_BYPASS}`;
-      }
-
-      const res = await fetch(url, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`Agent API error: ${res.status} ${res.statusText} - ${errorText}`);
-      }
-
-      const result = (await res.json()) as AgentResult;
-      console.log(`✓ Agent task executed remotely via ${AGENT_ENDPOINT}`);
-      return result;
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unknown error";
-      console.warn(`⚠ Remote agent execution failed: ${message}`);
-      console.warn(`⚠ Falling back to local execution`);
-      // Fall through to local execution
+    const remoteResult = await tryRemoteExecution(payload);
+    if (remoteResult) {
+      return remoteResult;
     }
+    // Fall through to local execution if remote fails
   }
 
   // Local execution (placeholder: swap this with Together / Oumi orchestration)
@@ -229,6 +350,12 @@ async function runAgentTask(
   return { summary, files };
 }
 
+/**
+ * Builds sample files based on task type
+ * @param taskType - The type of task being performed
+ * @param payload - The task payload containing target information
+ * @returns Array of file objects with paths and contents
+ */
 function buildSampleFiles(taskType: TaskType, payload: unknown) {
   const timestamp = new Date().toISOString();
 
@@ -280,6 +407,11 @@ function buildSampleFiles(taskType: TaskType, payload: unknown) {
   ];
 }
 
+/**
+ * Converts a feature name string to a React component name (PascalCase)
+ * @param feature - The feature name string
+ * @returns PascalCase component name
+ */
 function toComponentName(feature: string) {
   return feature
     .split(/[\s-]+/)
@@ -287,6 +419,10 @@ function toComponentName(feature: string) {
     .join("");
 }
 
+/**
+ * Persists agent-generated files to the filesystem
+ * @param files - Array of file objects to write
+ */
 async function persistAgentOutput(files: AgentResult["files"]) {
   for (const file of files) {
     await fs.mkdir(path.dirname(file.filePath), { recursive: true });
@@ -295,20 +431,13 @@ async function persistAgentOutput(files: AgentResult["files"]) {
   }
 }
 
+/**
+ * Posts run log to the API endpoint
+ * @param log - The run log object to post
+ */
 async function postLog(log: RunLog) {
   try {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-    
-    // Build URL with bypass token as query parameter if provided
-    let url = API_ENDPOINT;
-    if (process.env.VERCEL_PROTECTION_BYPASS) {
-      const separator = url.includes("?") ? "&" : "?";
-      url = `${url}${separator}x-vercel-protection-bypass=${process.env.VERCEL_PROTECTION_BYPASS}`;
-      // Also set as cookie for compatibility
-      headers.Cookie = `vercel-protection-bypass=${process.env.VERCEL_PROTECTION_BYPASS}`;
-    }
+    const { url, headers } = buildRequestConfig(API_ENDPOINT);
 
     const res = await fetch(url, {
       method: "POST",
@@ -319,7 +448,8 @@ async function postLog(log: RunLog) {
       console.warn(`Failed to POST log: ${res.status} ${res.statusText}`);
     }
   } catch (error) {
-    console.warn("Error posting log:", error);
+    const message = extractErrorMessage(error);
+    console.warn(`Error posting log: ${message}`);
   }
 }
 
