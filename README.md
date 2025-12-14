@@ -2,7 +2,18 @@
 
 DevPilot reduces repetitive development work by letting autonomous agents scaffold, test, refactor, and self-review code — end-to-end.
 
+![DevPilot Dashboard](assets/Screenshot%202025-12-12%20224016.png)
+
+*Dashboard showing executed runs, agent output summaries, and automatically generated Kestra AI summaries*
+
 ## Quick Start
+
+### Prerequisites
+
+- Node.js 18+ and npm
+- Git
+- (Optional) Redis for production deployments
+- (Optional) API keys for AI summaries (Together.ai, Groq, or Hugging Face)
 
 ### 1. Install Dependencies
 
@@ -14,16 +25,21 @@ npm install
 ### 2. Start the Development Server
 
 ```bash
-npm run dev
+npm run dev  # From apps/web directory
 ```
 
 The dashboard will be available at `http://localhost:3000`
+
+> **Note**: For local development, runs are stored in memory. For persistent storage, configure Redis (see Deployment section).
 
 ### 3. Run CLI Commands
 
 From the repo root (in a new terminal):
 
 ```bash
+# Make sure you're in the project root directory
+cd /path/to/DevPilot
+
 # Scaffold a new feature
 npx tsx cli/devpilot-cli.ts scaffold my-feature
 
@@ -42,6 +58,22 @@ Each command will:
 
 View results at `http://localhost:3000`
 
+### Troubleshooting
+
+**CLI not found:**
+- Ensure you're running commands from the project root directory
+- Verify `cli/devpilot-cli.ts` exists
+
+**Dashboard shows no runs:**
+- Check that the development server is running (`npm run dev` in `apps/web`)
+- Verify CLI commands completed successfully (check console output)
+- For Vercel deployments, ensure `REDIS_URL` is configured
+
+**API connection errors:**
+- For local development, ensure dashboard is running on `http://localhost:3000`
+- For Vercel deployments, check `DEVPILOT_API_ENDPOINT` environment variable
+- If using Vercel protection, set `VERCEL_PROTECTION_BYPASS` token
+
 ## Using CLI with Vercel Deployment
 
 ### Setup
@@ -50,6 +82,12 @@ View results at `http://localhost:3000`
 ```powershell
 $env:DEVPILOT_API_ENDPOINT="https://your-app.vercel.app/api/cline"
 $env:VERCEL_PROTECTION_BYPASS="your-bypass-token"  # If protection is enabled
+```
+
+   **For Bash/Linux/Mac:**
+```bash
+export DEVPILOT_API_ENDPOINT="https://your-app.vercel.app/api/cline"
+export VERCEL_PROTECTION_BYPASS="your-bypass-token"
 ```
 
 2. **Run CLI Commands**:
@@ -61,17 +99,46 @@ See `docs/vercel-cli-usage.md` for detailed instructions.
 
 ## Key Features
 
-- **CLI Commands**: `scaffold`, `tests`, `refactor` tasks
-- **Dashboard**: View all runs, outputs, and summaries
-- **Automatic Summaries**: Kestra summaries generated automatically for each run
-- **Persistent Storage**: Redis-backed storage for production deployments
+### Core Features
+
+- **CLI Commands**: Execute `scaffold`, `tests`, and `refactor` tasks from command line
+- **Dashboard**: Real-time view of all runs, outputs, and AI-generated summaries
+- **Automatic Summaries**: Kestra summaries generated automatically for each run (no manual trigger needed)
+- **Persistent Storage**: Redis-backed storage ensures data survives serverless cold starts
+- **Multi-Provider AI**: Supports Together.ai, Groq, Hugging Face, or template-based summaries
+
+### Workflow
+
+1. **Execute Task**: Run CLI command (`scaffold`, `tests`, or `refactor`)
+2. **Agent Processing**: Task is executed locally or remotely (if `DEVPILOT_AGENT_ENDPOINT` is set)
+3. **File Generation**: Agent generates files in appropriate directories
+4. **Logging**: Run details are posted to `/api/cline` endpoint
+5. **Summary Generation**: Kestra summary is automatically generated and attached
+6. **Dashboard Display**: View results, summaries, and file outputs in the dashboard
 
 ## Architecture
 
-- **CLI** (`cli/devpilot-cli.ts`): Executes tasks and logs to API
+### Component Overview
+
+- **CLI** (`cli/devpilot-cli.ts`): Executes tasks, collects context, and logs to API
+  - Supports local and remote execution
+  - Validates input and handles errors gracefully
 - **Dashboard** (`apps/web`): Next.js 15 app with TailwindCSS
-- **Storage**: Redis (production) or file-based (local development)
-- **Summaries**: Template-based (default) or optional free AI APIs (Groq, Hugging Face)
+  - Real-time run display
+  - Summary visualization
+  - File output preview
+- **Storage** (`apps/web/lib/store.ts`): Redis (production) or file-based (local development)
+  - Automatic fallback chain: Redis → Vercel KV → File storage
+- **Summaries** (`apps/web/lib/kestra-summary.ts`): Template-based (default) or optional AI APIs
+  - Priority: Together.ai > Groq > Hugging Face > Template-based
+
+### Data Flow
+
+```
+CLI Command → Agent Task → File Generation → API Logging → Summary Generation → Dashboard
+```
+
+See `docs/architecture.md` for detailed architecture documentation.
 
 
 
