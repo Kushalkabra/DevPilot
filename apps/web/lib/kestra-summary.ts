@@ -14,6 +14,43 @@ export type KestraSummary = {
 };
 
 /**
+ * Extracts JSON from AI response text, handling markdown code blocks
+ * @param content - Raw text response from AI API
+ * @returns Parsed JSON object or null if parsing fails
+ */
+function extractJsonFromResponse(content: string): { status?: string; summary?: string; decision?: string } | null {
+  try {
+    // Try to extract JSON from markdown code blocks first (common AI response format)
+    const jsonMatch = content.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/) || content.match(/(\{[\s\S]*\})/);
+    if (jsonMatch) {
+      const jsonStr = jsonMatch[1];
+      return JSON.parse(jsonStr);
+    }
+    // If no match, try parsing the entire content as JSON
+    return JSON.parse(content);
+  } catch {
+    // Parsing failed - return null to trigger fallback
+    return null;
+  }
+}
+
+/**
+ * Creates a fallback summary when AI parsing fails
+ * @param run - The run log to create summary for
+ * @param rawContent - Raw content from AI (if available)
+ * @returns KestraSummary with fallback values
+ */
+function createFallbackSummary(run: RunLog, rawContent?: string): KestraSummary {
+  const templateSummary = generateTemplateSummary(run);
+  return {
+    status: run.status === "completed" ? "success" : "failed",
+    summary: rawContent?.slice(0, 300) || templateSummary.summary,
+    decision: run.status === "completed" ? "Proceed" : "Review required",
+    createdAt: new Date().toISOString(),
+  };
+}
+
+/**
  * Generate a smart template-based Kestra summary (no API needed)
  */
 function generateTemplateSummary(run: RunLog): KestraSummary {
@@ -111,14 +148,21 @@ Provide a brief analysis with:
     const data = await response.json();
     const content = Array.isArray(data) ? data[0]?.generated_text : data.generated_text || "";
 
+    // If content is empty or invalid, fallback to template
+    if (!content || content.trim().length === 0) {
+      console.warn("[kestra-summary] Hugging Face returned empty content, using template");
+      return null;
+    }
+
     return {
       status: run.status === "completed" ? "success" : "failed",
-      summary: content.slice(0, 300) || generateTemplateSummary(run).summary,
+      summary: content.slice(0, 300),
       decision: run.status === "completed" ? "Proceed with review" : "Review required",
       createdAt: new Date().toISOString(),
     };
   } catch (error) {
     console.error("[kestra-summary] Hugging Face API error:", error);
+    // Return null to trigger fallback chain
     return null;
   }
 }
@@ -171,10 +215,10 @@ Provide a concise JSON response:
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content ?? "";
 
+    // Try to parse JSON from response
     try {
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
+      const parsed = extractJsonFromResponse(content);
+      if (parsed) {
         return {
           status: parsed.status || (run.status === "completed" ? "success" : "failed"),
           summary: parsed.summary || generateTemplateSummary(run).summary,
@@ -183,17 +227,14 @@ Provide a concise JSON response:
         };
       }
     } catch {
-      // Fall through to template summary
+      // JSON parsing failed - fall through to template summary
     }
 
-    return {
-      status: run.status === "completed" ? "success" : "failed",
-      summary: content.slice(0, 300) || generateTemplateSummary(run).summary,
-      decision: run.status === "completed" ? "Proceed" : "Review required",
-      createdAt: new Date().toISOString(),
-    };
+    // If JSON parsing failed, use raw content with fallback
+    return createFallbackSummary(run, content);
   } catch (error) {
     console.error("[kestra-summary] Groq API error:", error);
+    // Return null to trigger fallback chain
     return null;
   }
 }
@@ -257,69 +298,71 @@ Respond in JSON format:
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content ?? "";
 
-    // Try to parse JSON from the response
-    let parsed: { status?: string; summary?: string; decision?: string };
-    try {
-      // Extract JSON from markdown code blocks if present
-      const jsonMatch = content.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/) || content.match(/(\{[\s\S]*\})/);
-      const jsonStr = jsonMatch ? jsonMatch[1] : content;
-      parsed = JSON.parse(jsonStr);
-    } catch {
-      // If parsing fails, use the raw content
-      parsed = {
-        status: run.status === "completed" ? "success" : "failed",
-        summary: content || generateTemplateSummary(run).summary,
-        decision: run.status === "completed" ? "Proceed" : "Review required",
+    // Extract and parse JSON from response
+    const parsed = extractJsonFromResponse(content);
+    if (parsed) {
+      return {
+        status: parsed.status || (run.status === "completed" ? "success" : "failed"),
+        summary: parsed.summary || run.outputSummary.slice(0, 200),
+        decision: parsed.decision,
+        createdAt: new Date().toISOString(),
       };
     }
 
-    return {
-      status: parsed.status || (run.status === "completed" ? "success" : "failed"),
-      summary: parsed.summary || run.outputSummary.slice(0, 200),
-      decision: parsed.decision,
-      createdAt: new Date().toISOString(),
-    };
+    // If JSON parsing failed, use fallback summary
+    return createFallbackSummary(run, content);
   } catch (error) {
     console.error("[kestra-summary] Together.ai API error:", error);
+    // Return null to trigger fallback chain
     return null;
   }
 }
 
 /**
  * Generate a Kestra summary for a run
- * Priority: Together.ai > Groq > Hugging Face > Template-based (no API)
+ * Priority order: Together.ai > Groq > Hugging Face > Template-based (no API)
+ * 
+ * Each provider is tried in sequence. If a provider fails or returns null,
+ * the next provider in the chain is attempted. The template-based generator
+ * is guaranteed to succeed and serves as the final fallback.
+ * 
+ * @param run - The run log to generate a summary for
+ * @returns Promise resolving to KestraSummary (never fails)
  */
 export async function generateKestraSummary(
   run: RunLog,
 ): Promise<KestraSummary> {
-  // Try Together.ai first (if configured)
+  // Priority 1: Try Together.ai (if configured)
   if (TOGETHER_API_KEY) {
     const togetherSummary = await generateWithTogether(run);
     if (togetherSummary) {
       console.log("[kestra-summary] Generated summary using Together.ai API");
       return togetherSummary;
     }
+    // If Together.ai fails, continue to next provider
   }
 
-  // Try Groq (free tier)
+  // Priority 2: Try Groq (free tier, fast responses)
   if (GROQ_API_KEY) {
     const groqSummary = await generateWithGroq(run);
     if (groqSummary) {
       console.log("[kestra-summary] Generated summary using Groq API");
       return groqSummary;
     }
+    // If Groq fails, continue to next provider
   }
 
-  // Try Hugging Face (free tier)
+  // Priority 3: Try Hugging Face (free tier, may have cold starts)
   if (HUGGINGFACE_API_KEY) {
     const hfSummary = await generateWithHuggingFace(run);
     if (hfSummary) {
       console.log("[kestra-summary] Generated summary using Hugging Face API");
       return hfSummary;
     }
+    // If Hugging Face fails, continue to template fallback
   }
 
-  // Default: Use smart template-based summary (no API needed)
+  // Priority 4: Template-based summary (guaranteed fallback, no API needed)
   console.log("[kestra-summary] Generated summary using template-based generator");
   return generateTemplateSummary(run);
 }

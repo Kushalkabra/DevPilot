@@ -1,30 +1,43 @@
-# Refactor summary workflow (Kestra)
-# - Triggered via HTTP
-# - Receives info about a DevPilot refactor run
-# - Uses Kestra AI Agent to summarize the diff for humans
 id: refactor-summary
 namespace: devpilot
 description: "Summarize DevPilot refactor outputs for human review"
 
+# Workflow Overview:
+# 1. Triggered via HTTP POST request (external trigger)
+# 2. Receives refactor run details in request body (JSON)
+# 3. Uses Kestra AI Agent to analyze and summarize refactor changes
+# 4. Outputs structured summary (title, summary, risks, followups)
+# 5. Logs summary for review (can be extended to POST to webhook)
+
 triggers:
+  # HTTP Trigger Configuration
+  # - Listens for POST requests to trigger workflow
+  # - Request body should contain refactor run details (runId, diff, etc.)
+  # - Can be invoked from CLI, CI/CD, or other automation tools
   - id: http-trigger
     type: io.kestra.plugin.core.trigger.http.Http
     description: "Invoke via HTTP with refactor run details"
     conditions:
-      # Adjust paths/verbs as needed; this is a POST handler example.
       method:
         eq: "POST"
 
 tasks:
+  # Task 1: AI-Powered Diff Summary
+  # - Analyzes refactor diff from trigger body
+  # - Extracts key changes, patterns, and potential impacts
+  # - Produces structured output: title, summary, risks, followups
+  # - Uses Kestra AI Agent for intelligent analysis
   - id: summarize_diff
     type: io.kestra.plugin.ai.agents.v1.Agent
     description: "Summarize refactor diff"
     input:
       prompt: |
         You are a senior engineer summarizing a refactor diff for humans.
+        # Input: JSON payload from HTTP trigger containing refactor details
         Input payload (JSON):
         {{ trigger.body | json }}
 
+        # Expected Output Structure:
         Please produce:
         - title: short human-friendly summary
         - summary: 2-4 bullet points explaining what changed and why
@@ -36,6 +49,10 @@ tasks:
       - risks
       - followups
 
+  # Task 2: Log Summary Output
+  # - Logs the generated summary for visibility
+  # - Can be extended to POST summary to Next.js webhook
+  # - Format: structured text with title, summary, risks, followups
   - id: respond
     type: io.kestra.plugin.core.log.Log
     message: |

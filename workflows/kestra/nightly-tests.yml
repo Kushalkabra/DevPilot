@@ -1,16 +1,22 @@
-# Nightly test workflow (Kestra)
-# - Runs npm test
-# - Summarizes output with Kestra AI Agent
-# - If failures are detected, POSTs summary to Next.js webhook
 id: nightly-tests
 namespace: devpilot
 description: "Nightly Jest test run with AI summary and webhook notification"
 
+# Workflow Overview:
+# 1. Runs npm test to execute all Jest test suites
+# 2. Uses Kestra AI Agent to summarize test results (pass/fail, key failures)
+# 3. If failures detected, sends summary to Next.js webhook for dashboard display
+# 4. This enables automated test monitoring and alerting
+
 schedule:
-  cron: "0 2 * * *"   # 2:00 AM UTC nightly
+  # Runs daily at 2:00 AM UTC (adjust timezone as needed)
+  cron: "0 2 * * *"
 
 tasks:
-  # 1) Checkout / ensure workspace (assumes code is present on the worker or mounted)
+  # Task 1: Execute Test Suite
+  # - Installs dependencies with npm ci (clean install, uses package-lock.json)
+  # - Runs npm test to execute all Jest test suites
+  # - Captures stdout/stderr for analysis in next task
   - id: tests
     type: io.kestra.plugin.scripts.node.v1.NodeScript
     description: "Run npm test"
@@ -19,7 +25,11 @@ tasks:
     script: |
       npm test
 
-  # 2) Summarize the test output using Kestra's AI Agent
+  # Task 2: Generate AI Summary
+  # - Uses Kestra AI Agent to analyze test output from previous task
+  # - Extracts key information: pass/fail status, failure details, test counts
+  # - Produces human-readable summary for dashboard/notifications
+  # - Outputs structured data (status, summary) for conditional logic
   - id: summarize
     type: io.kestra.plugin.ai.agents.v1.Agent
     description: "Summarize test output"
@@ -35,7 +45,11 @@ tasks:
       - status
       - summary
 
-  # 3) If failures, send a webhook to Next.js
+  # Task 3: Conditional Webhook Notification
+  # - Only executes if test status is "failed" (conditional flow)
+  # - POSTs failure summary to Next.js /api/kestra-webhook endpoint
+  # - Includes status, summary, and timestamp for dashboard display
+  # - This enables real-time failure notifications in the DevPilot dashboard
   - id: notify
     type: io.kestra.plugin.core.flow.If
     condition: "{{ outputs.summarize.outputs.status == 'failed' }}"
@@ -43,6 +57,7 @@ tasks:
       - id: post_webhook
         type: io.kestra.plugin.http.v1.Http
         description: "POST failure summary to Next.js webhook"
+        # TODO: Replace with actual deployment URL or use environment variable
         uri: "https://your-next-app.example.com/api/kestra-webhook"
         method: POST
         headers:
